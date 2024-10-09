@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Analysis: MST, Cutsets, and Circuits</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #controls {
+            margin-bottom: 20px;
+        }
+
+        #cy {
+            width: 600px;
+            height: 400px;
+            border: 1px solid #ccc;
+        }
+
+        #output {
+            margin-top: 20px;
+            width: 600px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Graph Analysis: MST, Cutsets, and Circuits</h1>
+    <div id="controls">
+        <label for="verticesInput">Number of vertices:</label>
+        <input type="number" id="verticesInput" min="2" max="10" value="5">
+        <button onclick="generateGraph()">Generate Graph</button>
+        <button onclick="findMST()">Find MST</button>
+        <button onclick="findCutsetsAndCircuits()">Find Cutsets and Circuits</button>
+    </div>
+    <div id="cy"></div>
+    <div id="output"></div>
+
+    <script>
+        let cy;
+        let mst;
+
+        function generateGraph() {
+            const numVertices = parseInt(document.getElementById('verticesInput').value);
+
+            const nodes = [];
+            const edges = [];
+
+            for (let i = 0; i < numVertices; i++) {
+                nodes.push({ data: { id: `${i}` } });
+            }
+
+            for (let i = 0; i < numVertices; i++) {
+                for (let j = i + 1; j < numVertices; j++) {
+                    if (Math.random() < 0.5) {
+                        const weight = Math.floor(Math.random() * 10) + 1;
+                        edges.push({ data: { id: `${i}-${j}`, source: `${i}`, target: `${j}`, weight: weight } });
+                    }
+                }
+            }
+
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: { nodes, edges },
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'background-color': '#666',
+                            'label': 'data(id)'
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 3,
+                            'line-color': '#ccc',
+                            'target-arrow-color': '#ccc',
+                            'target-arrow-shape': 'triangle',
+                            'curve-style': 'bezier',
+                            'label': 'data(weight)'
+                        }
+                    }
+                ],
+                layout: { name: 'circle' }
+            });
+
+            document.getElementById('output').innerHTML = '';
+        }
+
+        function findMST() {
+            const edges = cy.edges().sort((a, b) => a.data('weight') - b.data('weight'));
+            const parents = {};
+            mst = cy.collection();
+
+            cy.nodes().forEach(node => {
+                parents[node.id()] = node.id();
+            });
+
+            function find(i) {
+                if (parents[i] !== i) {
+                    parents[i] = find(parents[i]);
+                }
+                return parents[i];
+            }
+
+            function union(i, j) {
+                const ri = find(i);
+                const rj = find(j);
+                if (ri !== rj) {
+                    parents[ri] = rj;
+                }
+            }
+
+            edges.forEach(edge => {
+                const source = edge.source().id();
+                const target = edge.target().id();
+                if (find(source) !== find(target)) {
+                    mst = mst.union(edge);
+                    union(source, target);
+                }
+            });
+
+            cy.elements().removeClass('highlight');
+            mst.addClass('highlight');
+
+            cy.style()
+                .selector('.highlight')
+                .style({
+                    'line-color': '#ff0000',
+                    'target-arrow-color': '#ff0000',
+                    'width': 5
+                })
+                .update();
+
+            document.getElementById('output').innerHTML = '<h3>Minimum Spanning Tree Found</h3>';
+        }
+
+        function findCutsetsAndCircuits() {
+            if (!mst) {
+                alert('Please find the MST first.');
+                return;
+            }
+
+            const cutsets = [];
+            const circuits = [];
+
+            cy.edges().difference(mst).forEach(edge => {
+                const circuit = findCircuit(edge);
+                circuits.push(circuit);
+
+                const cutset = findCutset(edge);
+                cutsets.push(cutset);
+            });
+
+            let output = '<h3>Fundamental Cutsets:</h3>';
+            cutsets.forEach((cutset, index) => {
+                output += `Cutset ${index + 1}: ${cutset.map(e => e.id()).join(', ')}<br>`;
+            });
+
+            output += '<h3>Fundamental Circuits:</h3>';
+            circuits.forEach((circuit, index) => {
+                output += `Circuit ${index + 1}: ${circuit.map(e => e.id()).join(', ')}<br>`;
+            });
+
+            document.getElementById('output').innerHTML = output;
+        }
+
+        function findCircuit(edge) {
+            const path1 = findPath(edge.source(), edge.target());
+            return path1.union(edge);
+        }
+
+        function findCutset(edge) {
+            const removed = mst.remove(edge);
+            const reachable = cy.collection();
+            dfs(edge.source(), reachable);
+            mst.union(removed);
+
+            return cy.edges().filter(e =>
+                (reachable.has(e.source()) && !reachable.has(e.target())) ||
+                (!reachable.has(e.source()) && reachable.has(e.target()))
+            );
+        }
+
+        function findPath(start, end) {
+            const queue = [[start, cy.collection()]];
+            const visited = new Set();
+
+            while (queue.length > 0) {
+                const [node, path] = queue.shift();
+                if (node === end) return path;
+
+                if (!visited.has(node.id())) {
+                    visited.add(node.id());
+                    mst.edges().filter(e => e.source().id() === node.id() || e.target().id() === node.id()).forEach(edge => {
+                        const neighbor = edge.source().id() === node.id() ? edge.target() : edge.source();
+                        queue.push([neighbor, path.union(edge)]);
+                    });
+                }
+            }
+
+            return cy.collection();
+        }
+
+        function dfs(node, visited) {
+            visited.merge(node);
+            mst.edges().filter(e => e.source().id() === node.id() || e.target().id() === node.id()).forEach(edge => {
+                const neighbor = edge.source().id() === node.id() ? edge.target() : edge.source();
+                if (!visited.has(neighbor)) {
+                    dfs(neighbor, visited);
+                }
+            });
+        }
+
+        generateGraph();
+    </script>
+</body>
+
+</html>
