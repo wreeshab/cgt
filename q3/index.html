@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shortest Path Graph Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #controls {
+            margin-bottom: 20px;
+        }
+
+        #cy {
+            width: 600px;
+            height: 400px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Shortest Path Graph Visualization Using Dijkastra</h1>
+    <div id="controls">
+        <label for="verticesInput">Number of vertices:</label>
+        <input type="number" id="verticesInput" min="2" max="10" value="5">
+        <button onclick="generateGraph()">Generate Graph</button>
+        <label for="startVertex">Start vertex:</label>
+        <select id="startVertex"></select>
+        <button onclick="findShortestPaths()">Find Shortest Paths</button>
+    </div>
+    <div id="cy"></div>
+
+    <script>
+        let cy;
+
+        function generateGraph() {
+            const numVertices = parseInt(document.getElementById('verticesInput').value);
+            const startVertexSelect = document.getElementById('startVertex');
+            startVertexSelect.innerHTML = '';
+
+            const nodes = [];
+            const edges = [];
+
+            for (let i = 0; i < numVertices; i++) {
+                nodes.push({ data: { id: `${i}` } });
+                startVertexSelect.appendChild(new Option(i, i));
+            }
+
+            for (let i = 0; i < numVertices; i++) {
+                for (let j = i + 1; j < numVertices; j++) {
+                    if (Math.random() < 0.5) {
+                        const weight = Math.floor(Math.random() * 10) + 1;
+                        edges.push({ data: { id: `${i}-${j}`, source: `${i}`, target: `${j}`, weight: weight } });
+                    }
+                }
+            }
+
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: { nodes, edges },
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'background-color': '#666',
+                            'label': 'data(id)'
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 3,
+                            'line-color': '#ccc',
+                            'target-arrow-color': '#ccc',
+                            'target-arrow-shape': 'triangle',
+                            'curve-style': 'bezier',
+                            'label': 'data(weight)'
+                        }
+                    }
+                ],
+                layout: { name: 'circle' }
+            });
+        }
+
+        function findShortestPaths() {
+            const startVertex = document.getElementById('startVertex').value;
+            const distances = {};
+            const previous = {};
+            const unvisited = new Set();
+
+            cy.nodes().forEach(node => {
+                distances[node.id()] = Infinity;
+                previous[node.id()] = null;
+                unvisited.add(node.id());
+            });
+
+            distances[startVertex] = 0;
+
+            while (unvisited.size > 0) {
+                let current = null;
+                let minDistance = Infinity;
+
+                for (const nodeId of unvisited) {
+                    if (distances[nodeId] < minDistance) {
+                        minDistance = distances[nodeId];
+                        current = nodeId;
+                    }
+                }
+
+                if (current === null) break;
+
+                unvisited.delete(current);
+
+                cy.getElementById(current).neighborhood().forEach(neighbor => {
+                    if (neighbor.isNode()) return;
+
+                    const alt = distances[current] + parseInt(neighbor.data('weight'));
+                    const target = neighbor.target().id();
+
+                    if (alt < distances[target]) {
+                        distances[target] = alt;
+                        previous[target] = current;
+                    }
+                });
+            }
+
+            cy.elements().removeClass('highlight');
+
+            for (const nodeId in previous) {
+                if (previous[nodeId] !== null) {
+                    const path = cy.getElementById(`${previous[nodeId]}-${nodeId}`);
+                    if (path.length > 0) {
+                        path.addClass('highlight');
+                    } else {
+                        cy.getElementById(`${nodeId}-${previous[nodeId]}`).addClass('highlight');
+                    }
+                }
+            }
+
+            cy.style()
+                .selector('.highlight')
+                .style({
+                    'line-color': '#ff0000',
+                    'target-arrow-color': '#ff0000',
+                    'width': 5
+                })
+                .update();
+        }
+
+        generateGraph();
+    </script>
+</body>
+
+</html>
